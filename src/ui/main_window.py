@@ -15,6 +15,8 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMenu,
+    QMessageBox,
     QSplitter,
     QTabWidget,
     QTextEdit,
@@ -48,6 +50,7 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._build_menus()
         self._build_status_bar()
+        self._refresh_profiles_from_db()
         logger.info("EPP Tester Platform démarré")
 
     # ------------------------------------------------------------------
@@ -59,6 +62,9 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("EPP Tester Platform v1.0")
         self.resize(1200, 800)
         self.setMinimumSize(900, 600)
+        # Icône de la fenêtre (logo ETP)
+        from src.ui.logo import create_etp_icon
+        self.setWindowIcon(create_etp_icon(32))
 
     def _build_ui(self) -> None:
         """Construit l'interface principale avec splitters."""
@@ -117,10 +123,14 @@ class MainWindow(QMainWindow):
         # Liste des profils
         self._profile_list = QListWidget()
         self._profile_list.setToolTip(
-            "Double-clic pour se connecter\n"
-            "Clic droit pour les options"
+            "Double-clic pour ouvrir une session\n"
+            "Clic droit pour Modifier / Supprimer"
         )
         self._profile_list.itemDoubleClicked.connect(self._on_profile_double_click)
+        self._profile_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._profile_list.customContextMenuRequested.connect(
+            self._on_profile_context_menu
+        )
         layout.addWidget(self._profile_list)
 
         # Légende indicateurs
@@ -148,26 +158,56 @@ class MainWindow(QMainWindow):
         return tabs
 
     def _build_welcome_tab(self) -> QWidget:
-        """Construit l'onglet de bienvenue avec les instructions."""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        """Construit l'onglet de bienvenue avec logo et instructions."""
+        from PyQt6.QtWidgets import QHBoxLayout
+        from src.ui.logo import create_etp_pixmap
 
+        widget = QWidget()
+        outer = QVBoxLayout(widget)
+        outer.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        # --- Bandeau logo + titre ---
+        header = QWidget()
+        header.setStyleSheet(
+            "background: qlineargradient(x1:0,y1:0,x2:1,y2:0,"
+            "stop:0 #0d47a1, stop:1 #1565c0);"
+            "border-radius: 8px;"
+        )
+        hdr_layout = QHBoxLayout(header)
+        hdr_layout.setContentsMargins(16, 12, 16, 12)
+
+        logo_lbl = QLabel()
+        logo_lbl.setPixmap(create_etp_pixmap(72))
+        hdr_layout.addWidget(logo_lbl)
+
+        title_lbl = QLabel(
+            "<span style='color:white; font-size:22px; font-weight:bold;'>"
+            "EPP Tester Platform</span><br>"
+            "<span style='color:#90caf9; font-size:12px;'>"
+            "Test &amp; diagnostic du protocole EPP — RFC 5730/5731/5732/5734"
+            "</span>"
+        )
+        title_lbl.setTextFormat(Qt.TextFormat.RichText)
+        hdr_layout.addWidget(title_lbl)
+        hdr_layout.addStretch()
+
+        outer.addWidget(header)
+
+        # --- Instructions ---
         instructions = QLabel(
-            "<h2>EPP Tester Platform v1.0</h2>"
-            "<p>Application de test du protocole EPP (RFC 5730) entre registre et registrars.</p>"
             "<hr>"
             "<h3>Démarrage rapide</h3>"
             "<ol>"
             "<li><b>Fichier → Nouveau Profil</b> (Ctrl+N) : créer un profil de connexion</li>"
             "<li>Double-cliquer sur un profil pour ouvrir une session</li>"
+            "<li>Clic droit sur un profil pour le <b>modifier</b> ou le <b>supprimer</b></li>"
             "<li><b>Connexion → Connecter</b> (Ctrl+L) : établir la connexion TLS</li>"
-            "<li>Envoyer des commandes EPP depuis l'onglet de session</li>"
+            "<li>Construire des commandes EPP et les envoyer — exporter en XML / JSON / Texte</li>"
             "</ol>"
             "<h3>Raccourcis clavier</h3>"
             "<ul>"
             "<li><b>Ctrl+N</b> : Nouveau profil</li>"
-            "<li><b>Ctrl+L</b> : Connecter</li>"
+            "<li><b>Ctrl+L</b> : Connecter la session active</li>"
             "<li><b>Ctrl+Q</b> : Quitter</li>"
             "</ul>"
             "<hr>"
@@ -177,8 +217,8 @@ class MainWindow(QMainWindow):
         instructions.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         instructions.setWordWrap(True)
         instructions.setMargin(20)
-
-        layout.addWidget(instructions)
+        outer.addWidget(instructions)
+        outer.addStretch()
         return widget
 
     def _build_console(self) -> QTextEdit:
@@ -399,19 +439,46 @@ class MainWindow(QMainWindow):
     def _on_settings(self) -> None:
         self.log_to_console("Paramètres : non implémenté.", COLOR_INFO)
 
+    def _get_active_session_tab(self):
+        """Retourne le SessionTab actif, ou None si l'onglet courant n'en est pas un."""
+        from src.ui.session_tab import SessionTab
+        current = self._tab_widget.currentWidget()
+        if isinstance(current, SessionTab):
+            return current
+        return None
+
     def _on_connect(self) -> None:
-        current = self._profile_list.currentItem()
-        if current is None:
-            self.statusBar().showMessage("Sélectionnez un profil à connecter.", 3000)
+        """Connecte la session active, ou ouvre une nouvelle session depuis le profil sélectionné."""
+        tab = self._get_active_session_tab()
+        if tab:
+            tab._on_connect()
             return
-        self.log_to_console(f"Connexion au profil : {current.text()} …", COLOR_INFO)
+        # Aucune session active : ouvrir la session du profil sélectionné
+        item = self._profile_list.currentItem()
+        if item:
+            self._on_profile_double_click(item)
+        else:
+            self.statusBar().showMessage(
+                "Sélectionnez un profil ou ouvrez une session.", 3000
+            )
 
     def _on_disconnect(self) -> None:
-        self.log_to_console("Déconnexion demandée.", COLOR_INFO)
-        self.update_status(False)
+        """Déconnecte la session EPP active."""
+        tab = self._get_active_session_tab()
+        if tab:
+            tab._on_disconnect()
+        else:
+            self.statusBar().showMessage("Aucune session active.", 3000)
 
     def _on_ping(self) -> None:
-        self.log_to_console("Test ping (hello) : non implémenté sans session active.", COLOR_INFO)
+        """Envoie un <hello> EPP sur la session active."""
+        tab = self._get_active_session_tab()
+        if tab:
+            from src.epp.commands import build_hello
+            tab._xml_editor.setPlainText(build_hello())
+            tab._on_send_command()
+        else:
+            self.log_to_console("Test ping : ouvrez une session d'abord.", COLOR_INFO)
 
     def _on_show_epp_codes(self) -> None:
         """Affiche le dictionnaire des codes retour EPP dans un onglet."""
@@ -442,10 +509,16 @@ class MainWindow(QMainWindow):
             "<tr><th>Code</th><th>Description</th><th>Cause</th><th>Solution</th></tr>"
         )
         for code, info in sorted(EPP_RETURN_CODES.items()):
-            color = "#006600" if code < 2000 else "#660000"
+            if code < 2000:
+                cell_bg = "#e8f5e9"
+                cell_fg = "#1b5e20"
+            else:
+                cell_bg = "#f0f0f0"
+                cell_fg = "#546e7a"
             html_parts.append(
                 f"<tr>"
-                f"<td><b style='color:{color}'>{code}</b></td>"
+                f"<td style='background-color:{cell_bg};'>"
+                f"<b style='color:{cell_fg}'>{code}</b></td>"
                 f"<td>{info['description']}</td>"
                 f"<td>{info['cause']}</td>"
                 f"<td>{info['solution']}</td>"
@@ -533,6 +606,65 @@ class MainWindow(QMainWindow):
         if index == 0:
             return
         self._tab_widget.removeTab(index)
+
+    def _on_profile_context_menu(self, pos) -> None:
+        """Affiche le menu contextuel clic-droit sur la liste des profils."""
+        item = self._profile_list.itemAt(pos)
+        if item is None:
+            return
+
+        menu = QMenu(self)
+        act_open = menu.addAction("Ouvrir une session")
+        menu.addSeparator()
+        act_edit = menu.addAction("Modifier le profil…")
+        act_delete = menu.addAction("Supprimer le profil")
+
+        act_open.triggered.connect(lambda: self._on_profile_double_click(item))
+        act_edit.triggered.connect(lambda: self._on_edit_profile(item))
+        act_delete.triggered.connect(lambda: self._on_delete_profile(item))
+
+        menu.exec(self._profile_list.mapToGlobal(pos))
+
+    def _on_edit_profile(self, item: QListWidgetItem) -> None:
+        """Ouvre le dialogue d'édition du profil sélectionné."""
+        profile_data = item.data(Qt.ItemDataRole.UserRole)
+        if not profile_data:
+            return
+        from src.ui.profile_dialog import ProfileDialog
+        dialog = ProfileDialog(parent=self, profile_id=profile_data.get("id"))
+        if dialog.exec():
+            self.log_to_console("Profil modifié.", COLOR_SUCCESS)
+            self._refresh_profiles_from_db()
+
+    def _on_delete_profile(self, item: QListWidgetItem) -> None:
+        """Supprime le profil après confirmation."""
+        profile_data = item.data(Qt.ItemDataRole.UserRole)
+        if not profile_data:
+            return
+        name = profile_data.get("name", "?")
+        reply = QMessageBox.question(
+            self,
+            "Supprimer le profil",
+            f"Supprimer le profil « {name} » ?\n"
+            "Cette action est irréversible.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            from src.db.database import get_session
+            from src.db.models import EppProfile
+            session = get_session()
+            profile = session.get(EppProfile, profile_data.get("id"))
+            if profile:
+                session.delete(profile)
+                session.commit()
+            session.close()
+            self.log_to_console(f"Profil '{name}' supprimé.", COLOR_INFO)
+            self._refresh_profiles_from_db()
+        except Exception as exc:
+            self.log_to_console(f"Erreur suppression : {exc}", COLOR_ERROR)
 
     def _refresh_profiles_from_db(self) -> None:
         """Recharge la liste des profils depuis la base de données."""

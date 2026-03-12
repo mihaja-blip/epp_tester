@@ -80,11 +80,33 @@ def parse(xml_str: str) -> EppResponse:
             greeting_el = root.find("epp:greeting", _NS)
             if greeting_el is not None:
                 sv_id = _extract_text(greeting_el, "epp:svID", _NS) or "unknown"
+                # Extrait les objURI et extURI annoncés dans le svcMenu
+                svc_menu = greeting_el.find("epp:svcMenu", _NS)
+                obj_uris: list[str] = []
+                ext_uris: list[str] = []
+                if svc_menu is not None:
+                    obj_uris = [
+                        el.text.strip()
+                        for el in svc_menu.findall("epp:objURI", _NS)
+                        if el.text
+                    ]
+                    svc_ext = svc_menu.find("epp:svcExtension", _NS)
+                    if svc_ext is not None:
+                        ext_uris = [
+                            el.text.strip()
+                            for el in svc_ext.findall("epp:extURI", _NS)
+                            if el.text
+                        ]
                 return EppResponse(
                     code=1000,
                     message="Greeting reçu",
                     raw_xml=xml_str,
-                    data={"svID": sv_id, "type": "greeting"},
+                    data={
+                        "svID": sv_id,
+                        "type": "greeting",
+                        "objURIs": obj_uris,
+                        "extURIs": ext_uris,
+                    },
                 )
             raise ValueError("Réponse EPP sans élément <response> ni <greeting>")
 

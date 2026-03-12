@@ -106,6 +106,8 @@ class SessionTab(QWidget):
         self._profile = profile
         self._connected = False
         self._logged_in = False
+        self._greeting_ext_uris: list[str] = []  # extURIs annoncés par le greeting
+        self._last_response_xml: str = ""         # dernière réponse brute (pour export)
         self._signals = _WorkerSignals()
 
         # Connexion des signaux worker → slots UI
@@ -201,8 +203,8 @@ class SessionTab(QWidget):
         self._btn_validate.setToolTip("Valider la syntaxe XML de la commande")
         self._btn_validate.triggered.connect(self._on_validate_xsd)
 
-        self._btn_export = toolbar.addAction("Exporter")
-        self._btn_export.setToolTip("Exporter l'historique en CSV ou JSON")
+        self._btn_export = toolbar.addAction("Exporter historique")
+        self._btn_export.setToolTip("Exporter l'historique des sessions en CSV ou JSON")
         self._btn_export.triggered.connect(self._on_export)
 
         return toolbar
@@ -364,6 +366,22 @@ class SessionTab(QWidget):
         code_row.addWidget(self._duration_label)
         layout.addLayout(code_row)
 
+        # Export résultat (format sélectionnable)
+        export_row = QHBoxLayout()
+        export_row.addWidget(QLabel("Export résultat :"))
+        self._export_fmt_combo = QComboBox()
+        self._export_fmt_combo.addItems(["XML", "JSON", "Texte"])
+        self._export_fmt_combo.setMaximumWidth(90)
+        export_row.addWidget(self._export_fmt_combo)
+        self._btn_export_result = QPushButton("Enregistrer…")
+        self._btn_export_result.setToolTip(
+            "Enregistre la dernière réponse EPP dans le format choisi"
+        )
+        self._btn_export_result.clicked.connect(self._on_export_result)
+        export_row.addWidget(self._btn_export_result)
+        export_row.addStretch()
+        layout.addLayout(export_row)
+
         return group
 
     # ------------------------------------------------------------------
@@ -467,7 +485,7 @@ class SessionTab(QWidget):
                 password = cm.decrypt(encrypted_pw) if encrypted_pw else ""
             except Exception:
                 password = ""
-            return C.build_login(login, password)
+            return C.build_login(login, password, ext_uris=self._greeting_ext_uris or None)
         if cmd_key == "logout":
             return C.build_logout()
         if cmd_key == "poll_req":
@@ -619,7 +637,7 @@ class SessionTab(QWidget):
         except Exception:
             password = ""
 
-        xml = build_login(login, password)
+        xml = build_login(login, password, ext_uris=self._greeting_ext_uris or None)
         self._xml_editor.setPlainText(xml)
         self._on_send_command()
 
@@ -710,6 +728,72 @@ class SessionTab(QWidget):
         except Exception as exc:
             QMessageBox.critical(self, "Erreur d'export", str(exc))
 
+    def _on_export_result(self) -> None:
+        """Exporte la dernière réponse EPP en XML, JSON ou Texte."""
+        import json
+        from PyQt6.QtWidgets import QFileDialog
+
+        if not self._last_response_xml.strip():
+            QMessageBox.warning(self, "Export résultat", "Aucune réponse à exporter.")
+            return
+
+        fmt = self._export_fmt_combo.currentText()
+        ext_map = {"XML": "xml", "JSON": "json", "Texte": "txt"}
+        filter_map = {
+            "XML": "XML (*.xml)",
+            "JSON": "JSON (*.json)",
+            "Texte": "Texte brut (*.txt)",
+        }
+        ext = ext_map[fmt]
+        profile_name = self._profile.get("name", "epp").replace(" ", "_")
+        default_name = f"epp_result_{profile_name}.{ext}"
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, f"Exporter résultat en {fmt}", default_name, filter_map[fmt]
+        )
+        if not file_path:
+            return
+
+        try:
+            if fmt == "JSON":
+                from src.epp.parser import parse
+                resp = parse(self._last_response_xml)
+                payload = {
+                    "code": resp.code,
+                    "message": resp.message,
+                    "success": resp.is_success(),
+                    "data": resp.data,
+                    "raw_xml": self._last_response_xml,
+                }
+                content = json.dumps(payload, ensure_ascii=False, indent=2)
+
+            elif fmt == "Texte":
+                from src.epp.parser import parse
+                try:
+                    resp = parse(self._last_response_xml)
+                    lines = [
+                        f"Code    : {resp.code}",
+                        f"Message : {resp.message}",
+                        f"Succès  : {'oui' if resp.is_success() else 'non'}",
+                        "",
+                    ]
+                    for key, val in resp.data.items():
+                        lines.append(f"{key:10}: {val}")
+                    lines += ["", "--- XML brut ---", self._last_response_xml]
+                    content = "\n".join(lines)
+                except Exception:
+                    content = self._last_response_xml
+
+            else:  # XML
+                content = self._last_response_xml
+
+            Path(file_path).write_text(content, encoding="utf-8")
+            QMessageBox.information(
+                self, "Export réussi", f"Fichier enregistré :\n{file_path}"
+            )
+        except Exception as exc:
+            QMessageBox.critical(self, "Erreur export résultat", str(exc))
+
     # ------------------------------------------------------------------
     # Slots worker → UI (thread-safe via signaux Qt)
     # ------------------------------------------------------------------
@@ -720,15 +804,17 @@ class SessionTab(QWidget):
         self._set_busy(False)
         self._update_toolbar_state()
 
-        # Parse du greeting pour info
+        # Parse du greeting pour info + extraction des extensions serveur
         try:
             from src.epp.parser import parse
             resp = parse(greeting)
             sv_id = resp.data.get("svID", "serveur EPP")
+            self._greeting_ext_uris = resp.data.get("extURIs", [])
             self._append_response(
                 f"✓ Connecté — Greeting reçu de : {sv_id}", COLOR_SUCCESS
             )
         except Exception:
+            self._greeting_ext_uris = []
             self._append_response("✓ Connecté — Greeting reçu", COLOR_SUCCESS)
 
         self._response_text.setPlainText(mask_sensitive(greeting))
@@ -753,6 +839,9 @@ class SessionTab(QWidget):
         """Affiche la réponse EPP dans le panneau de réponse."""
         self._set_busy(False)
 
+        # Stocker la réponse brute pour l'export
+        self._last_response_xml = response
+
         # Parse de la réponse pour l'affichage
         try:
             from src.epp.parser import parse
@@ -765,18 +854,22 @@ class SessionTab(QWidget):
             self._code_label.setStyleSheet(f"color: {color}; font-weight: bold;")
             self._duration_label.setText(f"{duration_ms} ms")
 
+            # Mise à jour de l'état login
+            cmd_type = self._detect_command_type(request)
+            if cmd_type == "login" and resp.is_success():
+                self._logged_in = True
+                self._update_toolbar_state()
+            elif code == 1500:
+                self._logged_in = False
+                self._update_toolbar_state()
+                self._append_response("Session EPP terminée (logout).", COLOR_INFO)
+
             # Log dans la console principale
-            cmd_type = getattr(resp, "command_type", "")
             self.log_message.emit(
                 f"[{self._profile.get('name')}] {cmd_type}"
                 f" → {code} {info['description']} ({duration_ms}ms)",
                 color
             )
-
-            # Si logout réussi, passer à déconnecté
-            if code == 1500:
-                self._logged_in = False
-                self._append_response("Session EPP terminée (logout).", COLOR_INFO)
 
         except Exception as exc:
             code = 0

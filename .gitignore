@@ -44,6 +44,8 @@ epp_tester.log.*
 # PyInstaller — répertoires de build (garder le .spec)
 build/
 dist/
+# Nuitka — répertoires de build
+dist_nuitka/
 
 # IDEs
 .idea/

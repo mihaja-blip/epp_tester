@@ -306,7 +306,8 @@ class ProfileDialog(QDialog):
             errors.append("• Port")
         if not self._login_edit.text().strip():
             errors.append("• Login")
-        if not self._password_edit.text():
+        # Mot de passe obligatoire uniquement à la création
+        if self._profile_id is None and not self._password_edit.text():
             errors.append("• Mot de passe")
 
         # Vérifie la cohérence cert/clé
@@ -329,13 +330,8 @@ class ProfileDialog(QDialog):
 
     def _save_to_db(self) -> None:
         """Chiffre le mot de passe et sauvegarde le profil en SQLite."""
-        from src.security.crypto import CredentialManager
         from src.db.database import get_session
         from src.db.models import EppProfile
-
-        # Chiffrement du mot de passe — jamais stocké en clair
-        cm = CredentialManager()
-        encrypted_pw = cm.encrypt(self._password_edit.text())
 
         session = get_session()
         try:
@@ -353,7 +349,15 @@ class ProfileDialog(QDialog):
             profile.host = self._host_edit.text().strip()
             profile.port = int(self._port_edit.text().strip())
             profile.login = self._login_edit.text().strip()
-            profile.password_encrypted = encrypted_pw
+
+            # Mot de passe : re-chiffrer uniquement si un nouveau est saisi.
+            # En mode édition avec champ vide → conserver le chiffré existant.
+            new_pw = self._password_edit.text()
+            if new_pw:
+                from src.security.crypto import CredentialManager
+                profile.password_encrypted = CredentialManager().encrypt(new_pw)
+            # else : mode édition + champ vide → password_encrypted inchangé
+
             profile.tls_cert_path = self._cert_edit.text().strip() or None
             profile.tls_key_path = self._key_edit.text().strip() or None
             profile.environment = self._env_combo.currentData()
