@@ -79,7 +79,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="EPP_Tester_Platform_v3",
+    name="EPP_Tester_Platform_v1.1",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

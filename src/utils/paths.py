@@ -35,3 +35,19 @@ def get_app_data_dir() -> Path:
 def is_frozen() -> bool:
     """Retourne True si l'application tourne en tant qu'exe PyInstaller."""
     return getattr(sys, "frozen", False)
+
+
+def get_resources_dir() -> Path:
+    """Retourne le répertoire resources/ embarqué.
+
+    - PyInstaller onefile : sys._MEIPASS/resources/
+    - PyInstaller onedir  : dossier exe/../resources/
+    - Développement       : projet/resources/
+    """
+    if is_frozen():
+        # PyInstaller extrait les datas dans sys._MEIPASS
+        base = Path(getattr(sys, "_MEIPASS", Path(sys.argv[0]).parent))
+    else:
+        # Dev : resources/ est à la racine du projet
+        base = Path(__file__).parent.parent.parent
+    return base / "resources"

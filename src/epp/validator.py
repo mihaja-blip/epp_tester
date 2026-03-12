@@ -10,22 +10,25 @@ from typing import Optional
 from lxml import etree
 
 from src.utils.logger import get_logger
+from src.utils.paths import get_resources_dir
 
 logger = get_logger("epp_tester.validator")
 
-# Répertoire des schémas XSD
-SCHEMAS_DIR = Path("resources/schemas")
+# Répertoire des schémas XSD — fonctionne en dev et dans l'exe compilé
+SCHEMAS_DIR = get_resources_dir() / "schemas"
 
 # Correspondance namespace → fichier XSD
 _SCHEMA_FILES = {
     "urn:ietf:params:xml:ns:epp-1.0":     "epp-1.0.xsd",
+    "urn:ietf:params:xml:ns:eppcom-1.0":  "eppcom-1.0.xsd",
     "urn:ietf:params:xml:ns:domain-1.0":  "domain-1.0.xsd",
     "urn:ietf:params:xml:ns:contact-1.0": "contact-1.0.xsd",
     "urn:ietf:params:xml:ns:host-1.0":    "host-1.0.xsd",
 }
 
-# Cache des schémas chargés
+# Cache des schémas chargés — clé spéciale pour le schéma parapluie global
 _schema_cache: dict[str, etree.XMLSchema] = {}
+_UMBRELLA_KEY = "__epp_umbrella__"
 
 
 class ValidationError(Exception):
@@ -138,34 +141,51 @@ class EppValidator:
         return None
 
     def _load_schema(self, namespace: str) -> Optional[etree.XMLSchema]:
-        """Charge et met en cache le schéma XSD pour un namespace.
+        """Charge et met en cache le schéma XSD parapluie EPP.
+
+        Tous les namespaces EPP sont validés via un schéma parapluie unique
+        qui importe domain, contact, host, eppcom et epp ensemble.
+        Cela permet à epp-1.0.xsd d'utiliser <any namespace="##other"/>
+        (processContents="strict") sans erreur de résolution.
 
         Args:
-            namespace: namespace EPP
+            namespace: namespace EPP (utilisé uniquement pour vérifier
+                       qu'il est connu)
 
         Returns:
-            XMLSchema chargé, ou None si le fichier est absent.
+            XMLSchema parapluie, ou None si aucun fichier n'est disponible.
         """
-        if namespace in _schema_cache:
-            return _schema_cache[namespace]
+        if _UMBRELLA_KEY in _schema_cache:
+            return _schema_cache[_UMBRELLA_KEY]
 
-        schema_file = _SCHEMA_FILES.get(namespace)
-        if not schema_file:
+        # Construit le schéma parapluie avec toutes les XSD disponibles
+        imports = "\n".join(
+            f'  <xs:import namespace="{ns}"'
+            f' schemaLocation="{(self._schemas_dir / fn).as_uri()}"/>'
+            for ns, fn in _SCHEMA_FILES.items()
+            if (self._schemas_dir / fn).exists()
+        )
+        if not imports:
+            logger.debug("Aucun fichier XSD disponible dans %s", self._schemas_dir)
             return None
 
-        schema_path = self._schemas_dir / schema_file
-        if not schema_path.exists():
-            logger.debug("Schéma XSD absent : %s", schema_path)
-            return None
+        umbrella_xml = (
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">\n'
+            f"{imports}\n"
+            "</xs:schema>"
+        )
 
         try:
-            schema_doc = etree.parse(str(schema_path))
-            schema = etree.XMLSchema(schema_doc)
-            _schema_cache[namespace] = schema
-            logger.debug("Schéma XSD chargé : %s", schema_path)
+            doc = etree.fromstring(umbrella_xml.encode("utf-8"))
+            schema = etree.XMLSchema(doc)
+            _schema_cache[_UMBRELLA_KEY] = schema
+            logger.debug(
+                "Schéma XSD parapluie EPP chargé depuis %s", self._schemas_dir
+            )
             return schema
         except etree.XMLSchemaParseError as exc:
-            logger.warning("Erreur de chargement du schéma %s : %s", schema_path, exc)
+            logger.warning("Erreur chargement schéma parapluie EPP : %s", exc)
             return None
 
 
