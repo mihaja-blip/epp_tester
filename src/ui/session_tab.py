@@ -347,6 +347,19 @@ class SessionTab(QWidget):
         group = QGroupBox("Réponse EPP")
         layout = QVBoxLayout(group)
 
+        # Sélecteur de format d'affichage
+        fmt_row = QHBoxLayout()
+        fmt_row.addWidget(QLabel("Format :"))
+        self._response_fmt_combo = QComboBox()
+        self._response_fmt_combo.addItems(["XML", "JSON", "Texte"])
+        self._response_fmt_combo.setMaximumWidth(80)
+        self._response_fmt_combo.currentTextChanged.connect(
+            self._on_response_format_changed
+        )
+        fmt_row.addWidget(self._response_fmt_combo)
+        fmt_row.addStretch()
+        layout.addLayout(fmt_row)
+
         self._response_text = QTextEdit()
         self._response_text.setReadOnly(True)
         self._response_text.setFont(QFont("Consolas", 9))
@@ -728,6 +741,51 @@ class SessionTab(QWidget):
         except Exception as exc:
             QMessageBox.critical(self, "Erreur d'export", str(exc))
 
+    def _render_response(self, xml: str) -> None:
+        """Affiche la réponse dans le format actuellement sélectionné."""
+        fmt = self._response_fmt_combo.currentText()
+        import json
+
+        if fmt == "JSON":
+            from src.epp.parser import parse
+            try:
+                resp = parse(xml)
+                payload = {
+                    "code": resp.code,
+                    "message": resp.message,
+                    "success": resp.is_success(),
+                    "data": resp.data,
+                }
+                content = json.dumps(payload, ensure_ascii=False, indent=2)
+            except Exception:
+                content = mask_sensitive(xml)
+
+        elif fmt == "Texte":
+            from src.epp.parser import parse
+            try:
+                resp = parse(xml)
+                lines = [
+                    f"Code    : {resp.code}",
+                    f"Message : {resp.message}",
+                    f"Succès  : {'oui' if resp.is_success() else 'non'}",
+                    "",
+                ]
+                for key, val in resp.data.items():
+                    lines.append(f"{key:10}: {val}")
+                content = "\n".join(lines)
+            except Exception:
+                content = mask_sensitive(xml)
+
+        else:  # XML (défaut)
+            content = mask_sensitive(xml)
+
+        self._response_text.setPlainText(content)
+
+    def _on_response_format_changed(self, _fmt: str) -> None:
+        """Re-affiche la dernière réponse quand le format change."""
+        if self._last_response_xml.strip():
+            self._render_response(self._last_response_xml)
+
     def _on_export_result(self) -> None:
         """Exporte la dernière réponse EPP en XML, JSON ou Texte."""
         import json
@@ -876,9 +934,8 @@ class SessionTab(QWidget):
             self._code_label.setText(f"Erreur de parse : {exc}")
             self._code_label.setStyleSheet(f"color: {COLOR_ERROR};")
 
-        # Affichage XML masqué
-        masked_response = mask_sensitive(response)
-        self._response_text.setPlainText(masked_response)
+        # Affichage dans le format choisi
+        self._render_response(response)
 
         # Log dans la session
         self._save_session_log(request, response, code, duration_ms)

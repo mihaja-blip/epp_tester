@@ -43,6 +43,7 @@ hidden_imports = [
     "src.ui.main_window",
     "src.ui.session_tab",
     "src.ui.profile_dialog",
+    "src.ui.logo",
 ]
 
 a = Analysis(
@@ -78,7 +79,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="EPP_Tester_Platform",
+    name="EPP_Tester_Platform_v3",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

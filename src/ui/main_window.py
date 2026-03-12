@@ -63,8 +63,11 @@ class MainWindow(QMainWindow):
         self.resize(1200, 800)
         self.setMinimumSize(900, 600)
         # Icône de la fenêtre (logo ETP)
-        from src.ui.logo import create_etp_icon
-        self.setWindowIcon(create_etp_icon(32))
+        try:
+            from src.ui.logo import create_etp_icon
+            self.setWindowIcon(create_etp_icon(32))
+        except Exception:
+            pass
 
     def _build_ui(self) -> None:
         """Construit l'interface principale avec splitters."""
@@ -177,7 +180,10 @@ class MainWindow(QMainWindow):
         hdr_layout.setContentsMargins(16, 12, 16, 12)
 
         logo_lbl = QLabel()
-        logo_lbl.setPixmap(create_etp_pixmap(72))
+        try:
+            logo_lbl.setPixmap(create_etp_pixmap(72))
+        except Exception:
+            logo_lbl.setText("EPP")
         hdr_layout.addWidget(logo_lbl)
 
         title_lbl = QLabel(
@@ -272,26 +278,13 @@ class MainWindow(QMainWindow):
         act_quit.triggered.connect(self.close)
         file_menu.addAction(act_quit)
 
-        # Menu Connexion
-        conn_menu = menubar.addMenu("&Connexion")
-
-        act_connect = QAction("&Connecter", self)
-        act_connect.setShortcut(QKeySequence("Ctrl+L"))
-        act_connect.setStatusTip("Connecter le profil sélectionné")
-        act_connect.triggered.connect(self._on_connect)
-        conn_menu.addAction(act_connect)
-
-        act_disconnect = QAction("&Déconnecter", self)
-        act_disconnect.setStatusTip("Fermer la session EPP active")
-        act_disconnect.triggered.connect(self._on_disconnect)
-        conn_menu.addAction(act_disconnect)
-
-        conn_menu.addSeparator()
-
-        act_ping = QAction("Test &Ping (hello)", self)
-        act_ping.setStatusTip("Envoyer un <hello> EPP pour tester la connectivité")
+        # Action directe Test Ping (dans la barre de menus, pas de sous-menu)
+        act_ping = QAction("⚡ Test Ping", self)
+        act_ping.setStatusTip(
+            "Envoyer un <hello> EPP sur la session active pour tester la connectivité"
+        )
         act_ping.triggered.connect(self._on_ping)
-        conn_menu.addAction(act_ping)
+        menubar.addAction(act_ping)
 
         # Menu Aide
         help_menu = menubar.addMenu("&Aide")
