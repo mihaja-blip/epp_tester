@@ -214,6 +214,13 @@ class MainWindow(QMainWindow):
 
         file_menu.addSeparator()
 
+        act_export = QAction("&Exporter historique…", self)
+        act_export.setStatusTip("Exporter l'historique des sessions en CSV ou JSON")
+        act_export.triggered.connect(self._on_export_history)
+        file_menu.addAction(act_export)
+
+        file_menu.addSeparator()
+
         act_settings = QAction("&Paramètres", self)
         act_settings.setStatusTip("Paramètres de l'application")
         act_settings.triggered.connect(self._on_settings)
@@ -361,8 +368,38 @@ class MainWindow(QMainWindow):
             # Rafraîchir la liste depuis la DB
             self._refresh_profiles_from_db()
 
+    def _on_export_history(self) -> None:
+        """Exporte l'historique global des sessions."""
+        from PyQt6.QtWidgets import QFileDialog
+        from src.utils.export import export_to_csv, export_to_json, query_logs_from_db
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Exporter l'historique EPP",
+            "epp_history_global.csv",
+            "CSV (*.csv);;JSON (*.json)",
+        )
+        if not file_path:
+            return
+        try:
+            from pathlib import Path
+            logs, profile_map = query_logs_from_db()
+            output = Path(file_path)
+            if file_path.endswith(".json"):
+                count = export_to_json(logs, output, profile_map)
+            else:
+                count = export_to_csv(logs, output, profile_map)
+            self.log_to_console(
+                f"Export terminé : {count} enregistrement(s) → {file_path}",
+                COLOR_SUCCESS
+            )
+        except RuntimeError:
+            self.log_to_console("Base de données non initialisée.", COLOR_ERROR)
+        except Exception as exc:
+            self.log_to_console(f"Erreur d'export : {exc}", COLOR_ERROR)
+
     def _on_settings(self) -> None:
-        self.log_to_console("Paramètres : non implémenté (Phase 2).", COLOR_INFO)
+        self.log_to_console("Paramètres : non implémenté.", COLOR_INFO)
 
     def _on_connect(self) -> None:
         current = self._profile_list.currentItem()
@@ -432,11 +469,63 @@ class MainWindow(QMainWindow):
         )
 
     def _on_profile_double_click(self, item: QListWidgetItem) -> None:
-        """Ouvre une session pour le profil double-cliqué."""
+        """Ouvre un onglet de session EPP pour le profil double-cliqué."""
         profile_data = item.data(Qt.ItemDataRole.UserRole)
-        if profile_data:
-            name = profile_data.get("name", "?")
-            self.log_to_console(f"Ouverture de session pour : {name}", COLOR_INFO)
+        if not profile_data:
+            return
+
+        name = profile_data.get("name", "?")
+
+        # Vérifie si un onglet pour ce profil est déjà ouvert
+        for i in range(self._tab_widget.count()):
+            if self._tab_widget.tabText(i) == name:
+                self._tab_widget.setCurrentIndex(i)
+                return
+
+        # Charge les données complètes du profil depuis la DB
+        profile_full = self._load_profile_data(profile_data.get("id"))
+        if profile_full is None:
+            self.log_to_console(f"Profil '{name}' introuvable en base.", COLOR_ERROR)
+            return
+
+        # Crée l'onglet de session
+        from src.ui.session_tab import SessionTab
+        tab = SessionTab(profile=profile_full, parent=self)
+        tab.log_message.connect(self.log_to_console)
+
+        idx = self._tab_widget.addTab(tab, name)
+        self._tab_widget.setCurrentIndex(idx)
+        self.log_to_console(f"Session ouverte pour : {name}", COLOR_INFO)
+
+    def _load_profile_data(self, profile_id: int) -> dict | None:
+        """Charge les données complètes d'un profil depuis la base de données."""
+        if profile_id is None:
+            return None
+        try:
+            from src.db.database import get_session
+            from src.db.models import EppProfile
+            session = get_session()
+            profile = session.get(EppProfile, profile_id)
+            if profile is None:
+                session.close()
+                return None
+            data = {
+                "id": profile.id,
+                "name": profile.name,
+                "host": profile.host,
+                "port": profile.port,
+                "login": profile.login,
+                "password_encrypted": profile.password_encrypted,
+                "tls_cert_path": profile.tls_cert_path,
+                "tls_key_path": profile.tls_key_path,
+                "environment": profile.environment,
+                "tags": profile.tags,
+            }
+            session.close()
+            return data
+        except Exception as exc:
+            logger.warning("Erreur de chargement du profil %s : %s", profile_id, exc)
+            return None
 
     def _on_tab_close(self, index: int) -> None:
         """Ferme l'onglet demandé (sauf l'onglet Bienvenue index=0)."""
