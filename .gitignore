@@ -1,0 +1,65 @@
+# Environnement virtuel
+venv/
+.venv/
+env/
+
+# Cache Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Distribution / packaging
+*.egg-info/
+dist/
+build/
+*.egg
+*.whl
+
+# Variables d'environnement
+.env
+.env.*
+
+# Tests
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Bases de données (générées au runtime)
+*.sqlite
+*.sqlite3
+*.db
+
+# Fichier de clé de chiffrement (CRITIQUE — ne jamais committer)
+.epp_key
+
+# Profils exportés
+epp_profiles_encrypted.json
+
+# Logs applicatifs
+epp_tester.log
+epp_tester.log.*
+
+# PyInstaller
+*.spec
+
+# IDEs
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride

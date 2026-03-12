@@ -1,0 +1,8 @@
+PyQt6>=6.6.0
+lxml>=5.1.0
+SQLAlchemy>=2.0.0
+cryptography>=42.0.0
+pytest>=8.0.0
+pytest-qt>=4.4.0
+flake8>=7.0.0
+black>=24.0.0
