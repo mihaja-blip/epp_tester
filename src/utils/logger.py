@@ -11,7 +11,10 @@ import re
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-LOG_FILE = Path("epp_tester.log")
+from src.utils.paths import get_app_data_dir
+
+# Log dans %APPDATA%/EPP_Tester_Platform/ — accessible même depuis un exe
+LOG_FILE = get_app_data_dir() / "epp_tester.log"
 LOG_MAX_BYTES = 5 * 1024 * 1024  # 5 Mo par fichier
 LOG_BACKUP_COUNT = 3
 

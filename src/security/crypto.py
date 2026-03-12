@@ -5,14 +5,15 @@ La clé est dérivée via PBKDF2HMAC et stockée localement dans .epp_key.
 
 import os
 import base64
-from pathlib import Path
 
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 
-# Fichier de stockage de la clé dérivée (gitignored)
-KEY_FILE = Path(".epp_key")
+from src.utils.paths import get_app_data_dir
+
+# Fichier de stockage de la clé dérivée dans %APPDATA% (jamais dans le répertoire courant)
+KEY_FILE = get_app_data_dir() / ".epp_key"
 # Sel fixe pour la dérivation PBKDF2 — non secret, sert uniquement
 # à différencier les clés entre installations
 _SALT = b"epp_tester_salt_v1"

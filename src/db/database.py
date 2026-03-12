@@ -11,9 +11,10 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.db.models import Base
+from src.utils.paths import get_app_data_dir
 
-# Fichier SQLite local (gitignored)
-DB_PATH = Path("epp_tester.db")
+# Base SQLite dans %APPDATA%/EPP_Tester_Platform/ — persiste entre les sessions
+DB_PATH = get_app_data_dir() / "epp_tester.db"
 _engine: Engine | None = None
 _SessionLocal: sessionmaker | None = None
 
