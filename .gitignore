@@ -41,8 +41,9 @@ epp_profiles_encrypted.json
 epp_tester.log
 epp_tester.log.*
 
-# PyInstaller
-*.spec
+# PyInstaller — répertoires de build (garder le .spec)
+build/
+dist/
 
 # IDEs
 .idea/

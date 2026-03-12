@@ -8,16 +8,14 @@ Architecture :
 - Menus : Fichier, Connexion, Aide
 """
 
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction, QColor, QFont, QKeySequence, QTextCursor
 from PyQt6.QtWidgets import (
-    QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
     QSplitter,
-    QStatusBar,
     QTabWidget,
     QTextEdit,
     QVBoxLayout,
@@ -301,8 +299,8 @@ class MainWindow(QMainWindow):
         # Escape HTML pour éviter les injections
         safe_msg = (
             message.replace("&", "&amp;")
-                   .replace("<", "&lt;")
-                   .replace(">", "&gt;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
         )
         self._console.append(
             f'<span style="color:{color}">{safe_msg}</span>'
@@ -436,7 +434,10 @@ class MainWindow(QMainWindow):
         text.setReadOnly(True)
         text.setFont(QFont("Consolas", 9))
 
-        html_parts = ["<h2>Dictionnaire des codes retour EPP</h2><table border='1' cellpadding='4'>"]
+        html_parts = [
+            "<h2>Dictionnaire des codes retour EPP</h2>"
+            "<table border='1' cellpadding='4'>"
+        ]
         html_parts.append(
             "<tr><th>Code</th><th>Description</th><th>Cause</th><th>Solution</th></tr>"
         )

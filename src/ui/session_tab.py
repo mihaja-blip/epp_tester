@@ -11,14 +11,13 @@ Fournit un environnement complet pour tester les commandes EPP :
 
 import threading
 import time
+from pathlib import Path
 from typing import Optional
 
 from PyQt6.QtCore import Qt, pyqtSignal, QObject
 from PyQt6.QtGui import QColor, QFont, QTextCursor
 from PyQt6.QtWidgets import (
     QComboBox,
-    QDialog,
-    QDialogButtonBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -312,7 +311,9 @@ class SessionTab(QWidget):
 
         self._xml_editor = QTextEdit()
         self._xml_editor.setFont(QFont("Consolas", 9))
-        self._xml_editor.setStyleSheet("background: #1a1a2e; color: #e0e0e0; border: 1px solid #333;")
+        self._xml_editor.setStyleSheet(
+            "background: #1a1a2e; color: #e0e0e0; border: 1px solid #333;"
+        )
         self._xml_editor.setPlaceholderText(
             "Construisez une commande via le panneau gauche\n"
             "ou saisissez directement du XML EPP ici…"
@@ -328,7 +329,8 @@ class SessionTab(QWidget):
 
         self._btn_send = QPushButton("Envoyer →")
         self._btn_send.setStyleSheet(
-            "QPushButton { background: #2e7d32; color: white; padding: 6px 16px; border-radius: 4px; }"
+            "QPushButton { background: #2e7d32; color: white;"
+            " padding: 6px 16px; border-radius: 4px; }"
             "QPushButton:hover { background: #388e3c; }"
             "QPushButton:disabled { background: #444; color: #888; }"
         )
@@ -377,17 +379,6 @@ class SessionTab(QWidget):
 
     def _update_form_visibility(self, cmd_key: str) -> None:
         """Gère la visibilité des champs du formulaire."""
-        # Tous les champs et leurs labels
-        all_fields = [
-            self._field_name, self._field_names, self._field_period,
-            self._field_exp_date, self._field_ns, self._field_registrant,
-            self._field_admin, self._field_tech, self._field_auth_pw,
-            self._field_op, self._field_msg_id, self._field_new_auth_pw,
-            self._field_contact_name, self._field_street, self._field_city,
-            self._field_cc, self._field_email, self._field_voice,
-            self._field_ipv4, self._field_ipv6,
-        ]
-
         # Champs visibles selon la commande
         visible: set = set()
 
@@ -560,7 +551,9 @@ class SessionTab(QWidget):
         if cmd_key == "host_create":
             ipv4 = [a.strip() for a in self._field_ipv4.text().split(",") if a.strip()]
             ipv6 = [a.strip() for a in self._field_ipv6.text().split(",") if a.strip()]
-            return H.build_host_create(name(), ipv4_addresses=ipv4 or None, ipv6_addresses=ipv6 or None)
+            return H.build_host_create(
+                name(), ipv4_addresses=ipv4 or None, ipv6_addresses=ipv6 or None
+            )
         if cmd_key == "host_update":
             ipv4 = [a.strip() for a in self._field_ipv4.text().split(",") if a.strip()]
             return H.build_host_update(name(), add_ipv4=ipv4 or None)
@@ -773,8 +766,10 @@ class SessionTab(QWidget):
             self._duration_label.setText(f"{duration_ms} ms")
 
             # Log dans la console principale
+            cmd_type = getattr(resp, "command_type", "")
             self.log_message.emit(
-                f"[{self._profile.get('name')}] {resp.command_type if hasattr(resp, 'command_type') else ''} → {code} {info['description']} ({duration_ms}ms)",
+                f"[{self._profile.get('name')}] {cmd_type}"
+                f" → {code} {info['description']} ({duration_ms}ms)",
                 color
             )
 
@@ -842,8 +837,6 @@ class SessionTab(QWidget):
     def _set_busy(self, busy: bool) -> None:
         """Active/désactive le curseur d'attente."""
         if busy:
-            from PyQt6.QtGui import QCursor
-            from PyQt6.QtCore import Qt
             self.setCursor(Qt.CursorShape.WaitCursor)
         else:
             self.unsetCursor()
@@ -910,7 +903,3 @@ class SessionTab(QWidget):
         except Exception:
             pass
         return "unknown"
-
-
-# Import manquant pour _on_export
-from pathlib import Path

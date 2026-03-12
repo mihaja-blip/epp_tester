@@ -238,7 +238,6 @@ class ProfileDialog(QDialog):
     ) -> None:
         """Effectue le test de connexion EPP (exécuté dans un thread)."""
         from src.epp.client import EppClient, EppConnectionError
-        from src.epp.commands import build_hello
         from src.epp.parser import parse
 
         client = EppClient()
